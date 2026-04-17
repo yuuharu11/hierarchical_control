@@ -40,7 +40,7 @@ class Args:
     #################################################################################################################
     # Utils
     #################################################################################################################
-    video_out_path: str = "data/libero/videos"  # Path to save videos
+    video_out_path: str = "videos/test"  # Path to save videos
 
     seed: int = 7  # Random Seed (for reproducibility)
 
