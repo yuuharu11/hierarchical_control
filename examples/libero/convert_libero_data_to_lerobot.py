@@ -25,6 +25,8 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import tensorflow_datasets as tfds
 import tyro
 
+# libero形式のデータをlerobot形式に変換する
+
 REPO_NAME = "your_hf_username/libero"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
     "libero_10_no_noops",
