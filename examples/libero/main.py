@@ -14,6 +14,10 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
+# csv記録用
+import time
+import csv
+
 
 # シミュレータ上でのダミー行動（最初の安定化待ちに使用。6軸移動は0、グリッパーは開く[-1]）
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
@@ -38,17 +42,38 @@ class Args:
         "libero_spatial"  # タスクスイートの選択肢: libero_spatial, libero_object, libero_goal, libero_10, libero_90
     )
     num_steps_wait: int = 10  # シミュレーション開始時、オブジェクトが静止するまで待機するステップ数
-    num_trials_per_task: int = 50  # 1タスクあたりに実行する試行回数（エピソード数）
+    num_trials_per_task: int = 5  # 1タスクあたりに実行する試行回数（エピソード数）
 
     #################################################################################################################
     # ユーティリティ設定
     #################################################################################################################
     video_out_path: str = "videos/test"  # 評価結果の動画を保存するパス
+    csv_out_path: str = "csv/libero"  # 評価結果のCSVを保存するパス
 
     seed: int = 7  # 再現性のための乱数シード
 
 
 def eval_libero(args: Args) -> None:
+    # csvファイルに記録するための準備
+    output_dir = pathlib.Path(args.csv_out_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 1. 試行ごとの詳細ログ (Raw Data)
+    raw_csv_path = output_dir / "episode_log.csv"
+    raw_headers = ["task_id", "episode_idx", "success", "steps", "avg_latency_ms"]
+    with open(raw_csv_path, 'w', newline='') as f:
+        csv.writer(f).writerow(raw_headers)
+
+    # 2. タスクごとの統計ログ (Summary)
+    summary_csv_path = output_dir / "task_log.csv"
+    summary_headers = [
+        "task_id", "task_description", "success_rate", 
+        "steps_mean", "steps_std", 
+        "latency_mean_ms", "latency_std_ms"
+    ]
+    with open(summary_csv_path, 'w', newline='') as f:
+        csv.writer(f).writerow(summary_headers)
+            
     # 乱数シードの設定
     np.random.seed(args.seed)
 
@@ -81,6 +106,11 @@ def eval_libero(args: Args) -> None:
     # 評価ループの開始
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
+        # csv記録用の変数
+        task_latencies = []  
+        task_steps = []
+        task_success_flags = [] 
+        
         # タスク情報の取得
         task = task_suite.get_task(task_id)
 
@@ -93,6 +123,7 @@ def eval_libero(args: Args) -> None:
         # エピソード（試行）ループの開始
         task_episodes, task_successes = 0, 0
         for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
+            episode_latencies = []  # このエピソード内の各推論のレイテンシを記録
             logging.info(f"\nTask: {task_description}")
 
             # 環境のリセット
@@ -105,6 +136,7 @@ def eval_libero(args: Args) -> None:
 
             # 各種変数のセットアップ
             t = 0
+            done = False
             replay_images = []
 
             logging.info(f"Starting episode {task_episodes+1}...")
@@ -154,11 +186,16 @@ def eval_libero(args: Args) -> None:
                             "prompt": str(task_description),
                         }
 
+                        start_time = time.perf_counter()
                         # サーバーへ問い合わせてアクション列を取得
                         action_chunk = client.infer(element)["actions"]
                         assert (
                             len(action_chunk) >= args.replan_steps
                         ), f"再計画の間隔を {args.replan_steps} ステップに設定していますが、モデルは {len(action_chunk)} ステップ分しか予測していません。"
+                        end_time = time.perf_counter()
+                        latency_ms = (end_time - start_time) * 1000
+                        episode_latencies.append(latency_ms)
+                        task_latencies.append(latency_ms)
                         
                         # アクションチャンクのうち、再計画ステップまでの分を計画に加える
                         action_plan.extend(action_chunk[: args.replan_steps])
@@ -168,7 +205,6 @@ def eval_libero(args: Args) -> None:
 
                     # 環境内でアクションを実行
                     obs, reward, done, info = env.step(action.tolist())
-                    
                     # 成功判定（LIBERO環境側でdoneが返れば成功）
                     if done:
                         task_successes += 1
@@ -182,6 +218,22 @@ def eval_libero(args: Args) -> None:
 
             task_episodes += 1
             total_episodes += 1
+
+            # エピソード単位の統計を更新
+            episode_steps = t + 1 if done else t
+            avg_latency_ms = float(np.mean(episode_latencies)) if episode_latencies else 0.0
+            task_steps.append(episode_steps)
+            task_success_flags.append(done)
+
+            # 試行ごとの詳細ログをCSVに追記
+            with open(raw_csv_path, 'a', newline='') as f:
+                csv.writer(f).writerow([
+                    task_id,
+                    episode_idx,
+                    done,
+                    episode_steps,
+                    avg_latency_ms,
+                ])
 
             # エピソードの再生動画を保存
             suffix = "success" if done else "failure"
@@ -200,6 +252,24 @@ def eval_libero(args: Args) -> None:
         # タスク単位および全体の成功率をログ出力
         logging.info(f"Current task success rate: {float(task_successes) / float(task_episodes)}")
         logging.info(f"Current total success rate: {float(total_successes) / float(total_episodes)}")
+
+        # タスクごとの統計をCSVに追記
+        success_rate = float(np.mean(task_success_flags)) if task_success_flags else 0.0
+        steps_mean = float(np.mean(task_steps)) if task_steps else 0.0
+        steps_std = float(np.std(task_steps)) if task_steps else 0.0
+        lat_mean = float(np.mean(task_latencies)) if task_latencies else 0.0
+        lat_std = float(np.std(task_latencies)) if task_latencies else 0.0
+
+        with open(summary_csv_path, 'a', newline='') as f:
+            csv.writer(f).writerow([
+                task_id,
+                task_description,
+                success_rate,
+                steps_mean,
+                steps_std,
+                lat_mean,
+                lat_std,
+            ])
 
     logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
     logging.info(f"Total episodes: {total_episodes}")
