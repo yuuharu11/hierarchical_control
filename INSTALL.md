@@ -11,6 +11,7 @@ source $HOME/.local/bin/env
 GIT_LFS_SKIP_SMUDGE=1 uv sync
 GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 apt install -y libgl1-mesa-glx
+apt-get install -y libglu1-mesa
 apt install -y libglib2.0-0
 ```
 
