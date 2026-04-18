@@ -18,6 +18,9 @@ import tyro
 import time
 import csv
 
+# 日時設定
+from datetime import datetime, timezone, timedelta
+
 
 # シミュレータ上でのダミー行動（最初の安定化待ちに使用。6軸移動は0、グリッパーは開く[-1]）
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
@@ -34,12 +37,18 @@ class Args:
     port: int = 8000       # サーバーのポート番号
     resize_size: int = 224 # モデル入力時のリサイズ後の解像度
     replan_steps: int = 5  # 何ステップごとに計画（推論）を更新するか
+    JST = timezone(timedelta(hours=+9))
+    timestamp = datetime.now(JST).strftime('%Y-%m-%d_%H-%M-%S')# 評価結果の動画やCSVのファイル名にタイムスタンプを付与して管理しやすくする
 
     #################################################################################################################
     # LIBERO環境固有の設定パラメータ
     #################################################################################################################
-    task_suite_name: str = (
-        "libero_spatial"  # タスクスイートの選択肢: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    task_suite_name: str = ( # タスクの種類: libero_spatialは位置推定タスク、libero_objectは物体操作タスク、libero_goalは目標達成タスク、libero_10は全10タスク、libero_90は難易度の高い90タスク
+        #"libero_spatial",
+        "libero_object"
+        #"libero_goal",
+        #"libero_10",
+        #"libero_90"
     )
     num_steps_wait: int = 10  # シミュレーション開始時、オブジェクトが静止するまで待機するステップ数
     num_trials_per_task: int = 5  # 1タスクあたりに実行する試行回数（エピソード数）
@@ -47,15 +56,15 @@ class Args:
     #################################################################################################################
     # ユーティリティ設定
     #################################################################################################################
-    video_out_path: str = "videos/test"  # 評価結果の動画を保存するパス
-    csv_out_path: str = "csv/libero"  # 評価結果のCSVを保存するパス
+    video_out_path: str = f"videos/test"  # 評価結果の動画を保存するパス
+    csv_out_path: str = f"csv/libero/test"  # 評価結果のCSVを保存するパス
 
     seed: int = 7  # 再現性のための乱数シード
 
 
 def eval_libero(args: Args) -> None:
     # csvファイルに記録するための準備
-    output_dir = pathlib.Path(args.csv_out_path)
+    output_dir = pathlib.Path(args.csv_out_path) / args.timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. 試行ごとの詳細ログ (Raw Data)
@@ -84,7 +93,8 @@ def eval_libero(args: Args) -> None:
     logging.info(f"Task suite: {args.task_suite_name}")
 
     # 動画保存用ディレクトリの作成
-    pathlib.Path(args.video_out_path).mkdir(parents=True, exist_ok=True)
+    video_dir = pathlib.Path(args.video_out_path) / args.task_suite_name / args.timestamp
+    video_dir.mkdir(parents=True, exist_ok=True)
 
     # 各タスクスイートごとの最大ステップ数を設定（学習データの最長デモに基づき余裕を持たせる）
     if args.task_suite_name == "libero_spatial":
@@ -239,7 +249,7 @@ def eval_libero(args: Args) -> None:
             suffix = "success" if done else "failure"
             task_segment = task_description.replace(" ", "_")
             imageio.mimwrite(
-                pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_{suffix}.mp4",
+                video_dir / f"rollout_{task_segment}_{suffix}.mp4",
                 [np.asarray(x) for x in replay_images],
                 fps=10,
             )
@@ -279,7 +289,12 @@ def _get_libero_env(task, resolution, seed):
     """LIBERO環境を初期化し、環境オブジェクトとタスク説明（言語）を返します。"""
     task_description = task.language
     task_bddl_file = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
-    env_args = {"bddl_file_name": task_bddl_file, "camera_heights": resolution, "camera_widths": resolution}
+    env_args = {
+        "bddl_file_name": task_bddl_file, 
+        "camera_heights": resolution, 
+        "camera_widths": resolution,
+        "control_freq": 20,
+        }
     env = OffScreenRenderEnv(**env_args)
     env.seed(seed)  # 重要: 固定の初期状態を使用する場合でも、シード値が物体の配置に影響することがあります
     return env, task_description
