@@ -37,6 +37,7 @@ class Args:
     port: int = 8000       # サーバーのポート番号
     resize_size: int = 224 # モデル入力時のリサイズ後の解像度
     replan_steps: int = 5  # 何ステップごとに計画（推論）を更新するか
+    control_freq: int = 20 # シミュレータの制御周波数[Hz]
     JST = timezone(timedelta(hours=+9))
     timestamp = datetime.now(JST).strftime('%Y-%m-%d_%H-%M-%S')# 評価結果の動画やCSVのファイル名にタイムスタンプを付与して管理しやすくする
 
@@ -44,20 +45,20 @@ class Args:
     # LIBERO環境固有の設定パラメータ
     #################################################################################################################
     task_suite_name: str = ( # タスクの種類: libero_spatialは位置推定タスク、libero_objectは物体操作タスク、libero_goalは目標達成タスク、libero_10は全10タスク、libero_90は難易度の高い90タスク
-        #"libero_spatial",
-        "libero_object"
-        #"libero_goal",
-        #"libero_10",
+        #"libero_spatial"
+        #"libero_object"
+        #"libero_goal"
+        "libero_10"
         #"libero_90"
     )
     num_steps_wait: int = 10  # シミュレーション開始時、オブジェクトが静止するまで待機するステップ数
-    num_trials_per_task: int = 5  # 1タスクあたりに実行する試行回数（エピソード数）
+    num_trials_per_task: int = 50  # 1タスクあたりに実行する試行回数（エピソード数）
 
     #################################################################################################################
     # ユーティリティ設定
     #################################################################################################################
-    video_out_path: str = f"videos/test"  # 評価結果の動画を保存するパス
-    csv_out_path: str = f"csv/libero/test"  # 評価結果のCSVを保存するパス
+    video_out_path: str = f"videos/initial/libero_goal"  # 評価結果の動画を保存するパス
+    csv_out_path: str = f"csv/libero/initial/libero_goal"  # 評価結果のCSVを保存するパス
 
     seed: int = 7  # 再現性のための乱数シード
 
@@ -128,7 +129,12 @@ def eval_libero(args: Args) -> None:
         initial_states = task_suite.get_task_init_states(task_id)
 
         # LIBERO環境とタスク説明（言語指示）の初期化
-        env, task_description = _get_libero_env(task, LIBERO_ENV_RESOLUTION, args.seed)
+        env, task_description = _get_libero_env(
+            task,
+            LIBERO_ENV_RESOLUTION,
+            args.seed,
+            args.control_freq,
+        )
 
         # エピソード（試行）ループの開始
         task_episodes, task_successes = 0, 0
@@ -251,7 +257,7 @@ def eval_libero(args: Args) -> None:
             imageio.mimwrite(
                 video_dir / f"rollout_{task_segment}_{suffix}.mp4",
                 [np.asarray(x) for x in replay_images],
-                fps=10,
+                fps=args.control_freq, # 動画を保存するfpsの設定（制御周波数に固定）
             )
 
             # 現在の結果をログ出力
@@ -285,7 +291,7 @@ def eval_libero(args: Args) -> None:
     logging.info(f"Total episodes: {total_episodes}")
 
 
-def _get_libero_env(task, resolution, seed):
+def _get_libero_env(task, resolution, seed, control_freq):
     """LIBERO環境を初期化し、環境オブジェクトとタスク説明（言語）を返します。"""
     task_description = task.language
     task_bddl_file = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
@@ -293,7 +299,7 @@ def _get_libero_env(task, resolution, seed):
         "bddl_file_name": task_bddl_file, 
         "camera_heights": resolution, 
         "camera_widths": resolution,
-        "control_freq": 20,
+        "control_freq": control_freq,
         }
     env = OffScreenRenderEnv(**env_args)
     env.seed(seed)  # 重要: 固定の初期状態を使用する場合でも、シード値が物体の配置に影響することがあります
