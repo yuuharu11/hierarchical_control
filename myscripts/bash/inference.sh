@@ -21,19 +21,21 @@ PORT="8000"
 
 # 以前の TASKS_CSV は「カンマ区切りで複数タスクを渡すための文字列」です。
 # 今は bash 配列で指定します。例: TASKS=(libero_goal libero_spatial)
-TASKS=(libero_10 libero_90)
+TASKS=(libero_spatial libero_object libero_goal libero_10)
 CONTROL_FREQS_CSV="20"
 
 RESIZE_SIZE="224"
-REPLAN_STEPS="5"
+REPLAN_STEPS="10"
 NUM_STEPS_WAIT="10"
 NUM_TRIALS_PER_TASK="50"
 SEED="7"
 
-BASE_VIDEO_OUT_PATH="videos/initial"
-BASE_CSV_OUT_PATH="csv/libero/initial"
+BASE_VIDEO_OUT_PATH="videos/20Hz-10steps"
+BASE_CSV_OUT_PATH="csv/libero/20Hz-10steps"
 
-RUN_ID="$(date +%Y-%m-%d_%H-%M-%S)"
+# main.py の timestamp (JST) と揃えるため、既定は Asia/Tokyo を使用
+RUN_TZ="${RUN_TZ:-Asia/Tokyo}"
+RUN_ID="$(TZ="$RUN_TZ" date +%Y-%m-%d_%H-%M-%S)"
 LOG_DIR="logs/libero_runs/$RUN_ID"
 
 IFS=',' read -r -a CONTROL_FREQS <<< "$CONTROL_FREQS_CSV"
@@ -44,6 +46,7 @@ echo "[INFO] start sequential evaluation"
 echo "[INFO] python: $PYTHON_BIN"
 echo "[INFO] tasks: ${TASKS[*]}"
 echo "[INFO] control freqs: ${CONTROL_FREQS[*]}"
+echo "[INFO] run tz: $RUN_TZ"
 echo "[INFO] logs: $LOG_DIR"
 
 for task in "${TASKS[@]}"; do
