@@ -21,6 +21,7 @@ import csv
 # 日時設定
 from datetime import datetime, timezone, timedelta
 
+# デフォルトの制御周波数は20Hz
 
 # シミュレータ上でのダミー行動（最初の安定化待ちに使用。6軸移動は0、グリッパーは開く[-1]）
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
