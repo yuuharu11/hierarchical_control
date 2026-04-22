@@ -170,3 +170,4 @@ cython_debug/
 policy_records/
 videos/
 csv/
+myscripts/bash/inference.sh
