@@ -22,23 +22,22 @@ PORT="8000"
 # 以前の TASKS_CSV は「カンマ区切りで複数タスクを渡すための文字列」です。
 # 今は bash 配列で指定します。例: TASKS=(libero_goal libero_spatial)
 TASKS=(libero_spatial libero_object libero_goal libero_10)
-CONTROL_FREQS_CSV="20"
+CONTROL_FREQS=(30 40 50)  
 
 RESIZE_SIZE="224"
-REPLAN_STEPS="10"
+REPLAN_STEPS="5"
 NUM_STEPS_WAIT="10"
 NUM_TRIALS_PER_TASK="50"
 SEED="7"
 
-BASE_VIDEO_OUT_PATH="videos/20Hz-10steps"
-BASE_CSV_OUT_PATH="csv/libero/20Hz-10steps"
+BASE_VIDEO_OUT_PATH="videos/"
+BASE_CSV_OUT_PATH="csv/libero/"
 
 # main.py の timestamp (JST) と揃えるため、既定は Asia/Tokyo を使用
 RUN_TZ="${RUN_TZ:-Asia/Tokyo}"
 RUN_ID="$(TZ="$RUN_TZ" date +%Y-%m-%d_%H-%M-%S)"
 LOG_DIR="logs/libero_runs/$RUN_ID"
 
-IFS=',' read -r -a CONTROL_FREQS <<< "$CONTROL_FREQS_CSV"
 
 mkdir -p "$LOG_DIR"
 
@@ -56,8 +55,8 @@ for task in "${TASKS[@]}"; do
     log_file="$LOG_DIR/${run_name}.log"
 
     # 出力は /out_path/<task>/<RUN_ID>/ の形に統一
-    video_path="${BASE_VIDEO_OUT_PATH}/${task}/${RUN_ID}"
-    csv_path="${BASE_CSV_OUT_PATH}/${task}/${RUN_ID}"
+    video_path="${BASE_VIDEO_OUT_PATH}/${control_freq}Hz/${REPLAN_STEPS}steps/${task}/${RUN_ID}"
+    csv_path="${BASE_CSV_OUT_PATH}/${control_freq}Hz/${REPLAN_STEPS}steps/${task}/${RUN_ID}"
 
     mkdir -p "$video_path" "$csv_path"
 
@@ -75,7 +74,7 @@ for task in "${TASKS[@]}"; do
       --args.video-out-path "$video_path" \
       --args.csv-out-path "$csv_path" \
       --args.seed "$SEED" \
-      >"$log_file" 2>&1; then
+      ; then
       echo "[ERROR] $run_name failed. See: $log_file"
       tail -n 80 "$log_file" || true
       exit 1
