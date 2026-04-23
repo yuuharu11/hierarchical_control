@@ -202,7 +202,8 @@ def eval_libero(args: Args) -> None:
                             ),
                             "prompt": str(task_description),
                         }
-
+                        
+# ===============================================測定開始=============================================================
                         start_time = time.perf_counter()
                         # サーバーへ問い合わせてアクション列を取得
                         action_chunk = client.infer(element)["actions"]
@@ -210,6 +211,8 @@ def eval_libero(args: Args) -> None:
                             len(action_chunk) >= args.replan_steps
                         ), f"再計画の間隔を {args.replan_steps} ステップに設定していますが、モデルは {len(action_chunk)} ステップ分しか予測していません。"
                         end_time = time.perf_counter()
+                        
+# ===============================================測定終了=============================================================
                         latency_ms = (end_time - start_time) * 1000
                         episode_latencies.append(latency_ms)
                         task_latencies.append(latency_ms)
