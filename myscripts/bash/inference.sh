@@ -25,7 +25,7 @@ TASKS=(libero_spatial libero_object libero_goal libero_10)
 CONTROL_FREQS=(30 40 50)  
 
 RESIZE_SIZE="224"
-REPLAN_STEPS="10"
+REPLAN_STEPS="3"
 NUM_STEPS_WAIT="10"
 NUM_TRIALS_PER_TASK="50"
 SEED="7"
