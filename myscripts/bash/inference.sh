@@ -21,7 +21,7 @@ PORT="8000"
 
 # 以前の TASKS_CSV は「カンマ区切りで複数タスクを渡すための文字列」です。
 # 今は bash 配列で指定します。例: TASKS=(libero_goal libero_spatial)
-TASKS=(libero_spatial libero_object libero_goal libero_10)
+TASKS=(libero_10)
 CONTROL_FREQS=(30 40 50)  
 
 RESIZE_SIZE="224"
